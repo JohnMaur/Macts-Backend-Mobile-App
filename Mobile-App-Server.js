@@ -216,7 +216,7 @@ app.post('/add_device', (req, res) => {
   });
 });
 
-// -----------------------UPDATE Student Device-----------------------------
+// -----------------------UPDATE Student Device------------------------
 app.post('/update_device/:user_id', (req, res) => {
   const userId = req.params.user_id;
   const { device_name, device_serialNumber, device_color, device_brand, device_image_url } = req.body;
@@ -228,7 +228,7 @@ app.post('/update_device/:user_id', (req, res) => {
     }
 
     connection.query(
-      'UPDATE student_device SET device_name = ?, device_serialNumber = ?, device_color = ?, device_brand = ?, device_image_url = ? WHERE user_id = ?',
+      'UPDATE student_device SET device_name = ?, device_serialNumber = ?, device_color = ?, device_brand = ?, device_image_url = ?, deviceRegistration = " " WHERE user_id = ?',
       [device_name, device_serialNumber, device_color, device_brand, device_image_url, userId],
       (error, result) => {
         connection.release();
