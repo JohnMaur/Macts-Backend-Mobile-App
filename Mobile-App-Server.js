@@ -385,7 +385,6 @@ app.post('/attendance_history', (req, res) => {
   });
 });
 
-
 // ------------------Fetch Attendance tap history------------------------
 // Fetch Attendance tap history with description
 app.post('/attendance_tapHistory/:user_id', (req, res) => {
@@ -418,9 +417,13 @@ app.post('/attendance_tapHistory/:user_id', (req, res) => {
   });
 });
 
-// ---------------------Gatepass RFID tap history-------------------------
+// ---------------------Gatepass RFID tap history----------------------
 app.post('/Gatepass_history', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, deviceName, serialNumber, date, user_id } = req.body;
+
+  const timeframeInSeconds = 30; // Define the timeframe within which duplicate records are not allowed
+  const timeframeInMilliseconds = timeframeInSeconds * 1000;
+  const currentTime = new Date(date).getTime();
 
   // Get a connection from the pool
   pool.getConnection((err, connection) => {
@@ -429,21 +432,45 @@ app.post('/Gatepass_history', (req, res) => {
       return res.status(500).json({ error: 'Database connection error' });
     }
 
-    // Perform the database query
-    connection.query('INSERT INTO gatepass_taphistory (gatepass_firstname, gatepass_middlename, gatepass_lastname, gatepass_tupID, gatepass_course, gatepass_section, device_name, serial_number, gatepass_historyDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [firstName, middleName, lastName, tuptId, course, section, deviceName, serialNumber, date, user_id], (error, results) => {
-      // Release the connection
-      connection.release();
+    // Perform the check query
+    connection.query(
+      'SELECT * FROM gatepass_taphistory WHERE user_id = ? AND serial_number = ? AND gatepass_historyDate >= ?',
+      [user_id, serialNumber, new Date(currentTime - timeframeInMilliseconds).toISOString()],
+      (checkError, checkResults) => {
+        if (checkError) {
+          connection.release();
+          console.error('Error executing check query:', checkError);
+          return res.status(500).json({ error: 'Database query error' });
+        }
 
-      if (error) {
-        console.error('Error executing query:', error);
-        return res.status(500).json({ error: 'Database query error' });
+        if (checkResults.length > 0) {
+          // If a record exists within the timeframe, skip insertion
+          connection.release();
+          return res.status(200).json({ success: true, message: 'RFID tap history already exists within the timeframe' });
+        }
+
+        // Perform the insertion query
+        connection.query(
+          'INSERT INTO gatepass_taphistory (gatepass_firstname, gatepass_middlename, gatepass_lastname, gatepass_tupID, gatepass_course, gatepass_section, device_name, serial_number, gatepass_historyDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [firstName, middleName, lastName, tuptId, course, section, deviceName, serialNumber, date, user_id],
+          (insertError, insertResults) => {
+            // Release the connection
+            connection.release();
+
+            if (insertError) {
+              console.error('Error executing insertion query:', insertError);
+              return res.status(500).json({ error: 'Database query error' });
+            }
+
+            // Send a success response
+            res.json({ success: true, message: 'RFID tap history inserted successfully' });
+          }
+        );
       }
-
-      // Send a success response
-      res.json({ success: true, message: 'RFID tap history successfully' });
-    });
+    );
   });
 });
+
 
 // ---------------------------Library RFID tap history----------------
 const moment = require('moment');
