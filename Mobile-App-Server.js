@@ -499,69 +499,97 @@ app.post('/library_history', (req, res) => {
   const currentDateTime = formatDateTime(new Date());
   const currentDate = formatDate(new Date());
 
+  const timeframeInSeconds = 30; // Define the timeframe within which duplicate records are not allowed
+  const timeframeInMilliseconds = timeframeInSeconds * 1000;
+  const currentTime = new Date().getTime();
+
   pool.getConnection((err, connection) => {
     if (err) {
       console.error('Error connecting to database:', err);
       return res.status(500).json({ error: 'Database connection error' });
     }
 
-    // Check the latest entry for the user
-    connection.query('SELECT * FROM library_taphistory WHERE user_id = ? ORDER BY library_InHistoryDate DESC LIMIT 1', [user_id], (selectError, results) => {
-      if (selectError) {
-        connection.release();
-        console.error('Error executing select query:', selectError);
-        return res.status(500).json({ error: 'Database select query error' });
-      }
-
-      if (results.length > 0) {
-        const lastEntry = results[0];
-        const lastEntryDate = formatDate(new Date(lastEntry.library_InHistoryDate));
-
-        if (lastEntryDate === currentDate && lastEntry.library_OutHistoryDate === null) {
-          // Same day and the Out date is NULL, update the Out date
-          connection.query('UPDATE library_taphistory SET library_OutHistoryDate = ? WHERE user_id = ? AND library_OutHistoryDate IS NULL',
-            [currentDateTime, user_id], (updateError, updateResults) => {
-              if (updateError) {
-                connection.release();
-                console.error('Error executing update query:', updateError);
-                return res.status(500).json({ error: 'Database update query error' });
-              }
-
-              connection.release();
-              console.log('Updated library_OutHistoryDate successfully');
-              res.json({ success: true, message: 'Updated library_OutHistoryDate successfully', tapStatus: 'Out' });
-            });
-        } else {
-          // Either a new day or the last entry already has an Out date, insert a new record
-          connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
-              connection.release();
-              if (insertError) {
-                console.error('Error executing insert query:', insertError);
-                return res.status(500).json({ error: 'Database insert query error' });
-              }
-              console.log('Inserted library_InHistoryDate successfully');
-              res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
-            });
+    // Check the latest entry for the user within the defined timeframe
+    connection.query(
+      'SELECT * FROM library_taphistory WHERE user_id = ? AND library_InHistoryDate >= ? ORDER BY library_InHistoryDate DESC LIMIT 1',
+      [user_id, new Date(currentTime - timeframeInMilliseconds).toISOString()],
+      (selectError, results) => {
+        if (selectError) {
+          connection.release();
+          console.error('Error executing select query:', selectError);
+          return res.status(500).json({ error: 'Database select query error' });
         }
-      } else {
-        // No previous entries, insert a new record
-        connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
-            connection.release();
-            if (insertError) {
-              console.error('Error executing insert query:', insertError);
-              return res.status(500).json({ error: 'Database insert query error' });
+
+        if (results.length > 0) {
+          // A record exists within the timeframe, skip insertion
+          connection.release();
+          return res.status(200).json({ success: true, message: 'Library tap history already exists within the timeframe' });
+        }
+
+        // Check the latest entry for the user to determine if it's a new day or if the last entry already has an Out date
+        connection.query(
+          'SELECT * FROM library_taphistory WHERE user_id = ? ORDER BY library_InHistoryDate DESC LIMIT 1',
+          [user_id],
+          (selectError, results) => {
+            if (selectError) {
+              connection.release();
+              console.error('Error executing select query:', selectError);
+              return res.status(500).json({ error: 'Database select query error' });
             }
-            console.log('Inserted library_InHistoryDate successfully');
-            res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
-          });
+
+            if (results.length > 0) {
+              const lastEntry = results[0];
+              const lastEntryDate = formatDate(new Date(lastEntry.library_InHistoryDate));
+
+              if (lastEntryDate === currentDate && lastEntry.library_OutHistoryDate === null) {
+                // Same day and the Out date is NULL, update the Out date
+                connection.query('UPDATE library_taphistory SET library_OutHistoryDate = ? WHERE user_id = ? AND library_OutHistoryDate IS NULL',
+                  [currentDateTime, user_id], (updateError, updateResults) => {
+                    if (updateError) {
+                      connection.release();
+                      console.error('Error executing update query:', updateError);
+                      return res.status(500).json({ error: 'Database update query error' });
+                    }
+
+                    connection.release();
+                    console.log('Updated library_OutHistoryDate successfully');
+                    res.json({ success: true, message: 'Updated library_OutHistoryDate successfully', tapStatus: 'Out' });
+                  });
+              } else {
+                // Either a new day or the last entry already has an Out date, insert a new record
+                connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                  [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+                    connection.release();
+                    if (insertError) {
+                      console.error('Error executing insert query:', insertError);
+                      return res.status(500).json({ error: 'Database insert query error' });
+                    }
+                    console.log('Inserted library_InHistoryDate successfully');
+                    res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+                  });
+              }
+            } else {
+              // No previous entries, insert a new record
+              connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+                  connection.release();
+                  if (insertError) {
+                    console.error('Error executing insert query:', insertError);
+                    return res.status(500).json({ error: 'Database insert query error' });
+                  }
+                  console.log('Inserted library_InHistoryDate successfully');
+                  res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+                });
+            }
+          }
+        );
       }
-    });
+    );
   });
 });
 
-// -------------------------Fetch Library tap history---------------------------
+
+// -------------------------Fetch Library tap history--------------------
 app.get('/library_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
 
