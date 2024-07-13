@@ -3,9 +3,12 @@ const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 require('dotenv').config();
+const socketIo = require('socket.io');
+const http = require('http');
 
 const app = express();
-
+const server = http.createServer(app);
+const io = socketIo(server);
 // Create a connection pool to the MySQL database
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -78,7 +81,7 @@ app.get('/users', (req, res) => {
   });
 });
 
-// --------------------------Student Info registration---------------------
+// --------------------------Student Info registration------------------
 app.post('/student_registration', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, user_id, user_email, studentProfile } = req.body;
 
@@ -162,7 +165,61 @@ app.get('/studentinfo/:user_id', (req, res) => {
   });
 });
 
-// -----------------------UPDATE Student Info-----------------------------
+// ---------------------Fetch Attendance Code---------------------------
+app.get('/attendanceCode/:user_id', (req, res) => {
+  const userId = req.params.user_id;
+
+  pool.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      return res.status(500).json({ error: 'Database connection error' });
+    }
+
+    connection.query('SELECT attendance_code FROM studentinfo WHERE user_id = ?', [userId], (error, rows) => {
+      connection.release();
+
+      if (error) {
+        console.error('Error fetching attendance code:', error);
+        return res.status(500).json({ error: 'Error fetching attendance code' });
+      }
+
+      if (rows.length > 0) {
+        res.json({ attendance_code: rows[0].attendance_code });
+      } else {
+        res.status(404).json({ error: 'No student found with the given user_id' });
+      }
+    });
+  });
+});
+
+// ----------------Fetch Attendance Code and Description------------
+app.get('/attendanceDetails/:user_id', (req, res) => {
+  const userId = req.params.user_id;
+
+  pool.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      return res.status(500).json({ error: 'Database connection error' });
+    }
+
+    connection.query('SELECT si.attendance_code, a.attendance_description FROM studentinfo si JOIN attendance a ON si.attendance_code = a.attendance_code WHERE si.user_id = ?', [userId], (error, rows) => {
+      connection.release();
+
+      if (error) {
+        console.error('Error fetching attendance details:', error);
+        return res.status(500).json({ error: 'Error fetching attendance details' });
+      }
+
+      if (rows.length > 0) {
+        res.json({ attendance_code: rows[0].attendance_code, attendance_description: rows[0].attendance_description });
+      } else {
+        res.status(404).json({ error: 'No student found with the given user_id' });
+      }
+    });
+  });
+});
+
+// -----------------------UPDATE Student Info--------------------------
 app.post('/update_studentinfo/:user_id', (req, res) => {
   const userId = req.params.user_id;
   const { firstName, middleName, lastName, user_email, tuptId, course, section, profile } = req.body;
@@ -182,6 +239,30 @@ app.post('/update_studentinfo/:user_id', (req, res) => {
       }
 
       res.json({ success: true, message: 'Student information updated successfully' });
+    });
+  });
+});
+
+// ------------------UPDATE Student Attendance Code--------------
+app.post('/update_attendance_code/:user_id', (req, res) => {
+  const userId = req.params.user_id;
+  const { code } = req.body;
+
+  pool.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      return res.status(500).json({ error: 'Database connection error' });
+    }
+
+    connection.query('UPDATE studentinfo SET attendance_code = ? WHERE user_id = ?', [code, userId], (error, result) => {
+      connection.release();
+
+      if (error) {
+        console.error('Error updating attendance code:', error);
+        return res.status(500).json({ error: 'Error updating attendance code' });
+      }
+
+      res.json({ success: true, message: 'Attendance code updated successfully' });
     });
   });
 });
@@ -272,7 +353,7 @@ app.get('/get_device/:user_id', (req, res) => {
   });
 });
 
-// -----------------------END Fetch Student Device---------------------------
+// -----------------------END Fetch Student Device----------------------
 // API endpoint to fetch student information
 app.get('/rfid_history/:user_id', (req, res) => {
   const userId = req.params.user_id;
@@ -299,7 +380,7 @@ app.get('/rfid_history/:user_id', (req, res) => {
   });
 });
 
-// --------------------------Checking Attendance code------------------------
+// --------------------------Checking Attendance code------------------
 app.post('/attendanceCode', (req, res) => {
   const { code } = req.body; // Assuming the code is sent in the request body
 
@@ -331,7 +412,7 @@ app.post('/attendanceCode', (req, res) => {
   });
 });
 
-// ---------------------Attendance RFID tap history-------------------------
+// ---------------------Attendance RFID tap history------------------
 app.post('/attendance_history', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, email, code, date, user_id } = req.body;
 
@@ -358,7 +439,7 @@ app.post('/attendance_history', (req, res) => {
   });
 });
 
-// ------------------Fetch Attendance tap history----------------------------
+// ------------------Fetch Attendance tap history------------------------
 // Fetch Attendance tap history with description
 app.post('/attendance_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
@@ -390,7 +471,7 @@ app.post('/attendance_tapHistory/:user_id', (req, res) => {
   });
 });
 
-// ---------------------Gatepass RFID tap history-------------------------
+// ---------------------Gatepass RFID tap history----------------------
 app.post('/Gatepass_history', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, deviceName, serialNumber, date, user_id } = req.body;
 
@@ -506,7 +587,7 @@ app.post('/library_history', (req, res) => {
   });
 });
 
-// -------------------------Fetch Library tap history---------------------------
+// -------------------------Fetch Library tap history------------------
 app.get('/library_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
 
@@ -606,7 +687,7 @@ app.post('/gym_history', (req, res) => {
   });
 });
 
-// -------------------------Fetch Gym tap history---------------------------
+// -------------------------Fetch Gym tap history---------------------
 app.get('/gym_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
 
@@ -632,7 +713,7 @@ app.get('/gym_tapHistory/:user_id', (req, res) => {
   });
 });
 
-// ---------------------Registrar RFID tap history-------------------------
+// ---------------------Registrar RFID tap history--------------------
 app.post('/registrar_history', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, email, date, user_id } = req.body;
 
@@ -659,7 +740,7 @@ app.post('/registrar_history', (req, res) => {
   });
 });
 
-// ----------------------Fetch Registrar tap history-------------------------
+// ----------------------Fetch Registrar tap history--------------------
 app.get('/registrar_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
 
@@ -685,7 +766,7 @@ app.get('/registrar_tapHistory/:user_id', (req, res) => {
   });
 });
 
-// ---------------------Gatepass RFID tap history-------------------------
+// ---------------------Gatepass RFID tap history---------------------
 app.post('/gatepass_history', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, email, date, user_id } = req.body;
 
@@ -712,7 +793,7 @@ app.post('/gatepass_history', (req, res) => {
   });
 });
 
-// ----------------------Fetch Gatepass tap history-------------------------
+// ----------------------Fetch Gatepass tap history--------------------
 app.get('/gatepass_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
 
