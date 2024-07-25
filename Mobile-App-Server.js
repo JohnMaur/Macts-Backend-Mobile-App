@@ -5,6 +5,7 @@ const cors = require('cors');
 require('dotenv').config();
 const socketIo = require('socket.io');
 const http = require('http');
+const moment = require('moment-timezone');
 
 const app = express();
 const server = http.createServer(app);
@@ -108,7 +109,7 @@ app.post('/student_registration', (req, res) => {
   });
 });
 
-// --------------------Checking TUPT ID IF IT IS EXIST-------------------
+// --------------------Checking TUPT ID IF IT IS EXIST--------------
 app.post('/check_tupt_id/:tuptId', (req, res) => {
   const { tuptId } = req.params;
 
@@ -161,6 +162,56 @@ app.get('/studentinfo/:user_id', (req, res) => {
       }
       // Send the fetched data
       res.json(rows);
+    });
+  });
+});
+
+// ------------------Student info display for device--------------------
+app.get('/studentinforDevice', (req, res) => {
+
+   // Get a connection from the pool
+  pool.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      return res.status(500).json({ error: 'Database connection error' });
+    }
+
+    // Perform the database query
+    connection.query('SELECT * FROM studentinfo', (error, rows) => {
+      // Release the connection
+      connection.release();
+
+      if (error) {
+        console.error('Error fetching student information:', error);
+        return res.status(500).json({ error: 'Error fetching student information' });
+      }
+      // Send the fetched data
+      res.json(rows);
+    });
+  });
+});
+
+app.get('/get_deviceForDevice', (req, res) => {
+
+  // Get a connection from the pool
+  pool.getConnection((err, connection) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      return res.status(500).json({ error: 'Database connection error' });
+    }
+
+    // Perform the database query to get device data for the user
+    connection.query('SELECT * FROM student_device LIMIT 1', (error, results) => {
+      // Release the connection
+      connection.release();
+
+      if (error) {
+        console.error('Error executing query:', error);
+        return res.status(500).json({ error: 'Database query error' });
+      }
+
+      // Send the device data as response
+      res.json(results);
     });
   });
 });
@@ -267,7 +318,7 @@ app.post('/update_attendance_code/:user_id', (req, res) => {
   });
 });
 
-// -----------------------ADD Student Device-----------------------------
+// -----------------------ADD Student Device--------------------------
 app.post('/add_device', (req, res) => {
   const { device_name, device_serialNumber, device_color, device_brand, user_id, device_image_url } = req.body;
 
@@ -439,7 +490,7 @@ app.post('/attendance_history', (req, res) => {
   });
 });
 
-// ------------------Fetch Attendance tap history------------------------
+// ------------------Fetch Attendance tap history---------------------
 // Fetch Attendance tap history with description
 app.post('/attendance_tapHistory/:user_id', (req, res) => {
   const userId = req.params.user_id;
@@ -499,31 +550,189 @@ app.post('/Gatepass_history', (req, res) => {
 });
 
 // ---------------------------Library RFID tap history----------------
-const moment = require('moment');
+// const moment = require('moment');
 
-// Function to format the date and time
-function formatDateTime(date) {
-  const options = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true };
-  return date.toLocaleString('en-US', options);
-}
+// // Function to format the date and time
+// function formatDateTime(date) {
+//   const options = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: true };
+//   return date.toLocaleString('en-US', options);
+// }
 
-// Function to format the date without time
-function formatDate(date) {
-  const options = { year: 'numeric', month: 'numeric', day: 'numeric' };
-  return date.toLocaleDateString('en-US', options);
-}
+// // Function to format the date without time
+// function formatDate(date) {
+//   const options = { year: 'numeric', month: 'numeric', day: 'numeric' };
+//   return date.toLocaleDateString('en-US', options);
+// }
 
-// Route to handle library history updates
+// // Route to handle library history updates
+// app.post('/library_history', (req, res) => {
+//   const { firstName, middleName, lastName, tuptId, course, section, email, user_id } = req.body;
+
+//   // Check if any of the required fields are empty strings or null
+//   if (!firstName || !lastName || !tuptId || !course || !section || !email || !user_id) {
+//     return res.status(400).json({ error: 'Required fields are missing or empty' });
+//   }
+
+//   const currentDateTime = formatDateTime(new Date());
+//   const currentDate = formatDate(new Date());
+
+//   pool.getConnection((err, connection) => {
+//     if (err) {
+//       console.error('Error connecting to database:', err);
+//       return res.status(500).json({ error: 'Database connection error' });
+//     }
+
+//     // Check the latest entry for the user
+//     connection.query('SELECT * FROM library_taphistory WHERE user_id = ? ORDER BY library_InHistoryDate DESC LIMIT 1', [user_id], (selectError, results) => {
+//       if (selectError) {
+//         connection.release();
+//         console.error('Error executing select query:', selectError);
+//         return res.status(500).json({ error: 'Database select query error' });
+//       }
+
+//       if (results.length > 0) {
+//         const lastEntry = results[0];
+//         const lastEntryDate = formatDate(new Date(lastEntry.library_InHistoryDate));
+
+//         if (lastEntryDate === currentDate && lastEntry.library_OutHistoryDate === null) {
+//           // Same day and the Out date is NULL, update the Out date
+//           connection.query('UPDATE library_taphistory SET library_OutHistoryDate = ? WHERE user_id = ? AND library_OutHistoryDate IS NULL',
+//             [currentDateTime, user_id], (updateError, updateResults) => {
+//               if (updateError) {
+//                 connection.release();
+//                 console.error('Error executing update query:', updateError);
+//                 return res.status(500).json({ error: 'Database update query error' });
+//               }
+
+//               connection.release();
+//               console.log('Updated library_OutHistoryDate successfully');
+//               res.json({ success: true, message: 'Updated library_OutHistoryDate successfully', tapStatus: 'Out' });
+//             });
+//         } else {
+//           // Either a new day or the last entry already has an Out date, insert a new record
+//           connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+//             [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+//               connection.release();
+//               if (insertError) {
+//                 console.error('Error executing insert query:', insertError);
+//                 return res.status(500).json({ error: 'Database insert query error' });
+//               }
+//               console.log('Inserted library_InHistoryDate successfully');
+//               res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+//             });
+//         }
+//       } else {
+//         // No previous entries, insert a new record
+//         connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+//           [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+//             connection.release();
+//             if (insertError) {
+//               console.error('Error executing insert query:', insertError);
+//               return res.status(500).json({ error: 'Database insert query error' });
+//             }
+//             console.log('Inserted library_InHistoryDate successfully');
+//             res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+//           });
+//       }
+//     });
+//   });
+// });
+
+
+// // Route to handle library history updates
+// app.post('/library_history', (req, res) => {
+//   const { firstName, middleName, lastName, tuptId, course, section, email, user_id } = req.body;
+
+//   // Check if any of the required fields are missing or empty
+//   if (!firstName || !lastName || !tuptId || !course || !section || !email || !user_id) {
+//     return res.status(400).json({ error: 'Required fields are missing or empty' });
+//   }
+
+//   const currentDateTime = new Date().toISOString();
+//   const currentDate = currentDateTime.split('T')[0];
+
+//   pool.getConnection((err, connection) => {
+//     if (err) {
+//       console.error('Error connecting to database:', err);
+//       return res.status(500).json({ error: 'Database connection error' });
+//     }
+
+//     // Check the latest entry for the user
+//     connection.query(
+//       'SELECT * FROM library_taphistory WHERE user_id = ? ORDER BY library_InHistoryDate DESC LIMIT 1',
+//       [user_id],
+//       (selectError, results) => {
+//         if (selectError) {
+//           connection.release();
+//           console.error('Error executing select query:', selectError);
+//           return res.status(500).json({ error: 'Database select query error' });
+//         }
+
+//         if (results.length > 0) {
+//           const lastEntry = results[0];
+//           const lastEntryDate = lastEntry.library_InHistoryDate.split('T')[0];
+
+//           if (lastEntryDate === currentDate && !lastEntry.library_OutHistoryDate) {
+//             // Same day and the Out date is NULL, update the Out date
+//             connection.query(
+//               'UPDATE library_taphistory SET library_OutHistoryDate = ? WHERE user_id = ? AND library_OutHistoryDate IS NULL',
+//               [currentDateTime, user_id],
+//               (updateError, updateResults) => {
+//                 connection.release();
+//                 if (updateError) {
+//                   console.error('Error executing update query:', updateError);
+//                   return res.status(500).json({ error: 'Database update query error' });
+//                 }
+
+//                 console.log('Updated library_OutHistoryDate successfully');
+//                 res.json({ success: true, message: 'Updated library_OutHistoryDate successfully', tapStatus: 'Out' });
+//               }
+//             );
+//           } else {
+//             // Either a new day or the last entry already has an Out date, insert a new record
+//             connection.query(
+//               'INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+//               [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id],
+//               (insertError, insertResults) => {
+//                 connection.release();
+//                 if (insertError) {
+//                   console.error('Error executing insert query:', insertError);
+//                   return res.status(500).json({ error: 'Database insert query error' });
+//                 }
+
+//                 console.log('Inserted library_InHistoryDate successfully');
+//                 res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+//               }
+//             );
+//           }
+//         } else {
+//           // No previous entries, insert a new record
+//           connection.query(
+//             'INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+//             [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id],
+//             (insertError, insertResults) => {
+//               connection.release();
+//               if (insertError) {
+//                 console.error('Error executing insert query:', insertError);
+//                 return res.status(500).json({ error: 'Database insert query error' });
+//               }
+
+//               console.log('Inserted library_InHistoryDate successfully');
+//               res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+//             }
+//           );
+//         }
+//       }
+//     );
+//   });
+// });
+
 app.post('/library_history', (req, res) => {
-  const { firstName, middleName, lastName, tuptId, course, section, email, user_id } = req.body;
+  const { firstName, middleName, lastName, tuptId, course, section, email, user_id, date } = req.body;
 
-  // Check if any of the required fields are empty strings or null
   if (!firstName || !lastName || !tuptId || !course || !section || !email || !user_id) {
     return res.status(400).json({ error: 'Required fields are missing or empty' });
   }
-
-  const currentDateTime = formatDateTime(new Date());
-  const currentDate = formatDate(new Date());
 
   pool.getConnection((err, connection) => {
     if (err) {
@@ -531,59 +740,71 @@ app.post('/library_history', (req, res) => {
       return res.status(500).json({ error: 'Database connection error' });
     }
 
-    // Check the latest entry for the user
-    connection.query('SELECT * FROM library_taphistory WHERE user_id = ? ORDER BY library_InHistoryDate DESC LIMIT 1', [user_id], (selectError, results) => {
-      if (selectError) {
-        connection.release();
-        console.error('Error executing select query:', selectError);
-        return res.status(500).json({ error: 'Database select query error' });
-      }
+    connection.query(
+      'SELECT * FROM library_taphistory WHERE user_id = ? ORDER BY library_InHistoryDate DESC LIMIT 1',
+      [user_id],
+      (selectError, results) => {
+        if (selectError) {
+          connection.release();
+          console.error('Error executing select query:', selectError);
+          return res.status(500).json({ error: 'Database select query error' });
+        }
 
-      if (results.length > 0) {
-        const lastEntry = results[0];
-        const lastEntryDate = formatDate(new Date(lastEntry.library_InHistoryDate));
+        const currentDateTime = moment().tz('Asia/Manila').format('M/D/YYYY, h:mm:ss A');
 
-        if (lastEntryDate === currentDate && lastEntry.library_OutHistoryDate === null) {
-          // Same day and the Out date is NULL, update the Out date
-          connection.query('UPDATE library_taphistory SET library_OutHistoryDate = ? WHERE user_id = ? AND library_OutHistoryDate IS NULL',
-            [currentDateTime, user_id], (updateError, updateResults) => {
-              if (updateError) {
+        if (results.length > 0) {
+          const lastEntry = results[0];
+          const lastEntryDate = lastEntry.library_InHistoryDate.split(' ')[0];
+
+          if (lastEntryDate === currentDateTime.split(' ')[0] && !lastEntry.library_OutHistoryDate) {
+            connection.query(
+              'UPDATE library_taphistory SET library_OutHistoryDate = ? WHERE user_id = ? AND library_OutHistoryDate IS NULL',
+              [currentDateTime, user_id],
+              (updateError, updateResults) => {
                 connection.release();
-                console.error('Error executing update query:', updateError);
-                return res.status(500).json({ error: 'Database update query error' });
-              }
+                if (updateError) {
+                  console.error('Error executing update query:', updateError);
+                  return res.status(500).json({ error: 'Database update query error' });
+                }
 
-              connection.release();
-              console.log('Updated library_OutHistoryDate successfully');
-              res.json({ success: true, message: 'Updated library_OutHistoryDate successfully', tapStatus: 'Out' });
-            });
+                console.log('Updated library_OutHistoryDate successfully');
+                res.json({ success: true, message: 'Updated library_OutHistoryDate successfully', tapStatus: 'Out' });
+              }
+            );
+          } else {
+            connection.query(
+              'INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id],
+              (insertError, insertResults) => {
+                connection.release();
+                if (insertError) {
+                  console.error('Error executing insert query:', insertError);
+                  return res.status(500).json({ error: 'Database insert query error' });
+                }
+
+                console.log('Inserted library_InHistoryDate successfully');
+                res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
+              }
+            );
+          }
         } else {
-          // Either a new day or the last entry already has an Out date, insert a new record
-          connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+          connection.query(
+            'INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id],
+            (insertError, insertResults) => {
               connection.release();
               if (insertError) {
                 console.error('Error executing insert query:', insertError);
                 return res.status(500).json({ error: 'Database insert query error' });
               }
+
               console.log('Inserted library_InHistoryDate successfully');
               res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
-            });
-        }
-      } else {
-        // No previous entries, insert a new record
-        connection.query('INSERT INTO library_taphistory (library_firstName, library_middleName, library_lastName, library_tupId, library_course, library_section, library_email, library_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
-            connection.release();
-            if (insertError) {
-              console.error('Error executing insert query:', insertError);
-              return res.status(500).json({ error: 'Database insert query error' });
             }
-            console.log('Inserted library_InHistoryDate successfully');
-            res.json({ success: true, message: 'Inserted library_InHistoryDate successfully', tapStatus: 'In' });
-          });
+          );
+        }
       }
-    });
+    );
   });
 });
 
@@ -614,6 +835,78 @@ app.get('/library_tapHistory/:user_id', (req, res) => {
 });
 
 // -------------------------Gym RFID tap history 3.0----------------
+// app.post('/gym_history', (req, res) => {
+//   const { firstName, middleName, lastName, tuptId, course, section, email, user_id } = req.body;
+
+//   // Check if any of the required fields are empty strings or null
+//   if (!firstName || !lastName || !tuptId || !course || !section || !email || !user_id) {
+//     return res.status(400).json({ error: 'Required fields are missing or empty' });
+//   }
+
+//   const currentDateTime = formatDateTime(new Date());
+//   const currentDate = formatDate(new Date());
+
+//   pool.getConnection((err, connection) => {
+//     if (err) {
+//       console.error('Error connecting to database:', err);
+//       return res.status(500).json({ error: 'Database connection error' });
+//     }
+
+//     // Check the latest entry for the user
+//     connection.query('SELECT * FROM gym_taphistory WHERE user_id = ? ORDER BY gym_InHistoryDate DESC LIMIT 1', [user_id], (selectError, results) => {
+//       if (selectError) {
+//         connection.release();
+//         console.error('Error executing select query:', selectError);
+//         return res.status(500).json({ error: 'Database select query error' });
+//       }
+
+//       if (results.length > 0) {
+//         const lastEntry = results[0];
+//         const lastEntryDate = formatDate(new Date(lastEntry.gym_InHistoryDate)); // Corrected from 'library_InHistoryDate'
+
+//         if (lastEntryDate === currentDate && lastEntry.gym_OutHistoryDate === null) {
+//           // Same day and the Out date is NULL, update the Out date
+//           connection.query('UPDATE gym_taphistory SET gym_OutHistoryDate = ? WHERE user_id = ? AND gym_OutHistoryDate IS NULL',
+//             [currentDateTime, user_id], (updateError, updateResults) => {
+//               if (updateError) {
+//                 connection.release();
+//                 console.error('Error executing update query:', updateError);
+//                 return res.status(500).json({ error: 'Database update query error' });
+//               }
+
+//               connection.release();
+//               console.log('Updated gym_OutHistoryDate successfully');
+//               res.json({ success: true, message: 'Updated gym_OutHistoryDate successfully', tapStatus: 'Out' });
+//             });
+//         } else {
+//           // Either a new day or the last entry already has an Out date, insert a new record
+//           connection.query('INSERT INTO gym_taphistory (gym_firstname, gym_middlename, gym_lastname, gym_tupID, gym_course, gym_section, gym_email, gym_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+//             [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+//               connection.release();
+//               if (insertError) {
+//                 console.error('Error executing insert query:', insertError);
+//                 return res.status(500).json({ error: 'Database insert query error' });
+//               }
+//               console.log('Inserted gym_InHistoryDate successfully');
+//               res.json({ success: true, message: 'Inserted gym_InHistoryDate successfully', tapStatus: 'In' });
+//             });
+//         }
+//       } else {
+//         // No previous entries, insert a new record
+//         connection.query('INSERT INTO gym_taphistory (gym_firstname, gym_middlename, gym_lastname, gym_tupID, gym_course, gym_section, gym_email, gym_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+//           [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+//             connection.release();
+//             if (insertError) {
+//               console.error('Error executing insert query:', insertError);
+//               return res.status(500).json({ error: 'Database insert query error' });
+//             }
+//             console.log('Inserted gym_InHistoryDate successfully');
+//             res.json({ success: true, message: 'Inserted gym_InHistoryDate successfully', tapStatus: 'In' });
+//           });
+//       }
+//     });
+//   });
+// });
 app.post('/gym_history', (req, res) => {
   const { firstName, middleName, lastName, tuptId, course, section, email, user_id } = req.body;
 
@@ -622,68 +915,77 @@ app.post('/gym_history', (req, res) => {
     return res.status(400).json({ error: 'Required fields are missing or empty' });
   }
 
-  const currentDateTime = formatDateTime(new Date());
-  const currentDate = formatDate(new Date());
-
   pool.getConnection((err, connection) => {
     if (err) {
       console.error('Error connecting to database:', err);
       return res.status(500).json({ error: 'Database connection error' });
     }
 
-    // Check the latest entry for the user
-    connection.query('SELECT * FROM gym_taphistory WHERE user_id = ? ORDER BY gym_InHistoryDate DESC LIMIT 1', [user_id], (selectError, results) => {
-      if (selectError) {
-        connection.release();
-        console.error('Error executing select query:', selectError);
-        return res.status(500).json({ error: 'Database select query error' });
-      }
+    connection.query(
+      'SELECT * FROM gym_taphistory WHERE user_id = ? ORDER BY gym_InHistoryDate DESC LIMIT 1',
+      [user_id],
+      (selectError, results) => {
+        if (selectError) {
+          connection.release();
+          console.error('Error executing select query:', selectError);
+          return res.status(500).json({ error: 'Database select query error' });
+        }
 
-      if (results.length > 0) {
-        const lastEntry = results[0];
-        const lastEntryDate = formatDate(new Date(lastEntry.gym_InHistoryDate)); // Corrected from 'library_InHistoryDate'
+        const currentDateTime = moment().tz('Asia/Manila').format('M/D/YYYY, h:mm:ss A');
 
-        if (lastEntryDate === currentDate && lastEntry.gym_OutHistoryDate === null) {
-          // Same day and the Out date is NULL, update the Out date
-          connection.query('UPDATE gym_taphistory SET gym_OutHistoryDate = ? WHERE user_id = ? AND gym_OutHistoryDate IS NULL',
-            [currentDateTime, user_id], (updateError, updateResults) => {
-              if (updateError) {
+        if (results.length > 0) {
+          const lastEntry = results[0];
+          const lastEntryDate = lastEntry.gym_InHistoryDate.split(' ')[0];
+
+          if (lastEntryDate === currentDateTime.split(' ')[0] && !lastEntry.gym_OutHistoryDate) {
+            connection.query(
+              'UPDATE gym_taphistory SET gym_OutHistoryDate = ? WHERE user_id = ? AND gym_OutHistoryDate IS NULL',
+              [currentDateTime, user_id],
+              (updateError, updateResults) => {
                 connection.release();
-                console.error('Error executing update query:', updateError);
-                return res.status(500).json({ error: 'Database update query error' });
-              }
+                if (updateError) {
+                  console.error('Error executing update query:', updateError);
+                  return res.status(500).json({ error: 'Database update query error' });
+                }
 
-              connection.release();
-              console.log('Updated gym_OutHistoryDate successfully');
-              res.json({ success: true, message: 'Updated gym_OutHistoryDate successfully', tapStatus: 'Out' });
-            });
+                console.log('Updated gym_OutHistoryDate successfully');
+                res.json({ success: true, message: 'Updated gym_OutHistoryDate successfully', tapStatus: 'Out' });
+              }
+            );
+          } else {
+            connection.query(
+              'INSERT INTO gym_taphistory (gym_firstName, gym_middleName, gym_lastName, gym_tupId, gym_course, gym_section, gym_email, gym_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id],
+              (insertError, insertResults) => {
+                connection.release();
+                if (insertError) {
+                  console.error('Error executing insert query:', insertError);
+                  return res.status(500).json({ error: 'Database insert query error' });
+                }
+
+                console.log('Inserted gym_InHistoryDate successfully');
+                res.json({ success: true, message: 'Inserted gym_InHistoryDate successfully', tapStatus: 'In' });
+              }
+            );
+          }
         } else {
-          // Either a new day or the last entry already has an Out date, insert a new record
-          connection.query('INSERT INTO gym_taphistory (gym_firstname, gym_middlename, gym_lastname, gym_tupID, gym_course, gym_section, gym_email, gym_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
+          connection.query(
+            'INSERT INTO gym_taphistory (gym_firstName, gym_middleName, gym_lastName, gym_tupId, gym_course, gym_section, gym_email, gym_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id],
+            (insertError, insertResults) => {
               connection.release();
               if (insertError) {
                 console.error('Error executing insert query:', insertError);
                 return res.status(500).json({ error: 'Database insert query error' });
               }
+
               console.log('Inserted gym_InHistoryDate successfully');
               res.json({ success: true, message: 'Inserted gym_InHistoryDate successfully', tapStatus: 'In' });
-            });
-        }
-      } else {
-        // No previous entries, insert a new record
-        connection.query('INSERT INTO gym_taphistory (gym_firstname, gym_middlename, gym_lastname, gym_tupID, gym_course, gym_section, gym_email, gym_InHistoryDate, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [firstName, middleName, lastName, tuptId, course, section, email, currentDateTime, user_id], (insertError, insertResults) => {
-            connection.release();
-            if (insertError) {
-              console.error('Error executing insert query:', insertError);
-              return res.status(500).json({ error: 'Database insert query error' });
             }
-            console.log('Inserted gym_InHistoryDate successfully');
-            res.json({ success: true, message: 'Inserted gym_InHistoryDate successfully', tapStatus: 'In' });
-          });
+          );
+        }
       }
-    });
+    );
   });
 });
 
